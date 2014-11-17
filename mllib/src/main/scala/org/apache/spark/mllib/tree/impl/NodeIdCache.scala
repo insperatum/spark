@@ -43,7 +43,7 @@ private[tree] case class NodeIndexUpdater(
    * @param bins Bin information to convert the bin indices to approximate feature values.
    * @return Child node index to update to.
    */
-  def updateNodeIndex(binnedFeatures: Array[Int], bins: Array[Array[Bin]]): Int = {
+  def updateNodeIndex(binnedFeatures: (Int => Int), bins: Array[Array[Bin]]): Int = {
     if (split.featureType == Continuous) {
       val featureIndex = split.feature
       val binIndex = binnedFeatures(featureIndex)

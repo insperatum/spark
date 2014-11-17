@@ -283,7 +283,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private def predictNodeIndex(
       node: Node,
-      binnedFeatures: Array[Int],
+      binnedFeatures: (Int => Int),
       bins: Array[Array[Bin]],
       unorderedFeatures: Set[Int]): Int = {
     if (node.isLeaf || node.split.isEmpty) {
