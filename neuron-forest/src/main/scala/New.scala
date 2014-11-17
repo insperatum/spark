@@ -16,7 +16,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
+import org.apache.spark.mllib.tree.impl.{BinnedFeatureData, RawFeatureData, DecisionTreeMetadata}
 import org.apache.spark.mllib.tree.impurity.Gini
 
 import scala.collection.mutable.ArrayBuffer
@@ -26,10 +26,13 @@ import org.apache.spark.mllib.tree.model.Bin
 
 object New extends App{
   val data_root = "/home/luke/spark/neuron-forest/data"
+  val featureSubsetStrategy = "sqrt"
   val impurity = "entropy"
-  val maxDepth = 14
+  val maxDepth = 4
   val maxBins = 100
   val nFeatures = 30
+  val nTrees = 5
+
 
   println("Starting Spark!")
   val conf = new SparkConf()
@@ -40,49 +43,47 @@ object New extends App{
 
 
 
-  // -------------- Generate splits + bins ---------------------
-
-  val features_file = data_root + "/im1/features.raw"
-  val feats1 = loadFeatures(features_file)
-  val feats1RDD = sc.parallelize(0 until feats1.length/nFeatures).map{ j =>
-      Vectors.dense(feats1.view(j, j+30).map(_.toDouble).toArray) //todo: obviously not this
-  }
-  val (splits, bins) = LukeUtil.getSplitsAndBins(feats1RDD, maxBins)
-  bins.head.foreach(println)
-
-
-
-
   // -------------------  Train  --------------------------------
-/*
-  val train = loadData(0.2, fromFront = true)
+
+  val train = loadTrainingData(0.2, fromFront = true)
   println("Training on " + train.count() + " examples")
-
-
-  val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, "sqrt", "entropy", 14, 100)
+  val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, impurity, maxDepth, maxBins)
   //val model = RandomForest.trainRegressor(train, Map[Int, Int](), 50, "sqrt", "variance", 14, 100)
-  val test = loadData(0.8, fromFront = false)
-//  test.take(50).foreach(println)
 
-  val labelsAndPredictions = test.map { point =>
-    val prediction = model.predict(point.features)
-    (point.label, prediction)
-  }
-  val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow(v - p, 2)}.mean()
-  println("Test Mean Squared Error = " + testMSE)
-  println("Learned regression tree model:\n" + model)
-*/
+  println("trained.")
 
+  // --------------------  Test  --------------------------------
+//  val
+//  val test = loadTrainingData(0.8, fromFront = false)
+////  test.take(50).foreach(println)
+//
+//  val labelsAndPredictions = test.map { point =>
+//    val prediction = model.predict(point.features)
+//    (point.label, prediction)
+//  }
+//  val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow(v - p, 2)}.mean()
+//  println("Test Mean Squared Error = " + testMSE)
+//  println("Learned regression tree model:\n" + model)
 
   
 
 
 
 
-  def loadData(p:Double, fromFront:Boolean, numFiles:Int = 1) = {
-    val data = sc.parallelize(1 to numFiles, numFiles).mapPartitionsWithIndex((i, _) => {
+  def loadTrainingData(p:Double, fromFront:Boolean, numFiles:Int = 1) = {
+    val rawFeaturesData = sc.parallelize(1 to numFiles, numFiles).mapPartitionsWithIndex((i, _) => {
       val features_file = data_root + "/im" + (i + 1) + "/features.raw"
-      val features = loadFeatures(features_file)
+      Seq(new RawFeatureData(features_file, nFeatures)).toIterator
+    }).cache()
+    val featsRDD = rawFeaturesData.mapPartitions(_.next().toVectors).cache()
+    println("getting splits and bins!")
+    val (splits, bins) = LukeUtil.getSplitsAndBins(featsRDD, maxBins)
+    featsRDD.unpersist()
+    println("done!")
+    bins.head.foreach(println)
+
+    val trainingData = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
+      val binnedFeatureData = new BinnedFeatureData(s.next(), bins)
 
       val targets_file = data_root + "/im" + (i + 1) + "/targets.txt"
       val n_targets_total = Source.fromFile(targets_file).getLines().size //todo: store this at the top of the file
@@ -114,31 +115,11 @@ object New extends App{
           step._1 * (min_idx._1 + t / seg_step._1) +
             step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2) +
             (min_idx._3 + t % seg_step._2)
-        LabeledPoint(y, Vectors.dense(features.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
+        LabeledPoint(y, Vectors.dense(binnedFeatureData.arr.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
       }
-    })
+    }).cache()
 
-
-    data.cache()
-  }
-
-
-  def loadFeatures(path:String):Array[Float] = {
-    val file = new RandomAccessFile(path, "r")
-    val fileChannel = file.getChannel
-
-    val byteBuffer = ByteBuffer.allocate(4 * 10000) //must be multiple of 4 for floats
-    val outFloatBuffer = FloatBuffer.allocate(fileChannel.size.toInt/4)
-
-    var bytesRead = fileChannel.read(byteBuffer)
-    while(bytesRead > 0) {
-      byteBuffer.flip()
-      outFloatBuffer.put(byteBuffer.asFloatBuffer())
-      byteBuffer.clear()
-      bytesRead = fileChannel.read(byteBuffer)
-    }
-
-    outFloatBuffer.array()
+    trainingData
   }
 
 }

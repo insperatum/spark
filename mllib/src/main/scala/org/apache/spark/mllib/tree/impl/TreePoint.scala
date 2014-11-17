@@ -99,19 +99,26 @@ private[tree] object TreePoint {
    * @param isUnorderedFeature  (only applies if feature is categorical)
    * @param bins   Bins for features, of size (numFeatures, numBins).
    */
-  private def findBin(
+  private[tree] def findBin(
       featureIndex: Int,
-      labeledPoint: LabeledPoint,
+      input: LabeledPoint,
       featureArity: Int,
       isUnorderedFeature: Boolean,
       bins: Array[Array[Bin]]): Int = {
+    val binForFeatures = bins(featureIndex)
+    val feature = input.features(featureIndex)
+    findBin(feature, featureArity, isUnorderedFeature, binForFeatures)
+  }
 
+  private[tree] def findBin(
+      featureValue: Double,
+      featureArity: Int,
+      isUnorderedFeature: Boolean,
+      binForFeatures: Array[Bin]): Int = {
     /**
      * Binary search helper method for continuous feature.
      */
     def binarySearchForBins(): Int = {
-      val binForFeatures = bins(featureIndex)
-      val feature = labeledPoint.features(featureIndex)
       var left = 0
       var right = binForFeatures.length - 1
       while (left <= right) {
@@ -119,9 +126,9 @@ private[tree] object TreePoint {
         val bin = binForFeatures(mid)
         val lowThreshold = bin.lowSplit.threshold
         val highThreshold = bin.highSplit.threshold
-        if ((lowThreshold < feature) && (highThreshold >= feature)) {
+        if ((lowThreshold < featureValue) && (highThreshold >= featureValue)) {
           return mid
-        } else if (lowThreshold >= feature) {
+        } else if (lowThreshold >= featureValue) {
           right = mid - 1
         } else {
           left = mid + 1
@@ -136,19 +143,18 @@ private[tree] object TreePoint {
       if (binIndex == -1) {
         throw new RuntimeException("No bin was found for continuous feature." +
           " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
+          " Feature index: $featureIndex.  Feature value: $featureValue")
       }
       binIndex
     } else {
       // Categorical feature bins are indexed by feature values.
-      val featureValue = labeledPoint.features(featureIndex)
       if (featureValue < 0 || featureValue >= featureArity) {
         throw new IllegalArgumentException(
           s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureArity - 1}," +
-            s" but a data point gives it value $featureValue.\n" +
-            "  Bad data point: " + labeledPoint.toString)
+            " Feature $featureIndex is categorical with values in" +
+            " {0,...,${featureArity - 1}," +
+            " but a data point gives it value $featureValue.\n" +
+            "  Bad data point: ${features.toString}")
       }
       featureValue.toInt
     }
