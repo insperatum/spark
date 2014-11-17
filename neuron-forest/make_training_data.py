@@ -8,7 +8,7 @@ def makeFeatures(img, filename):
     orders = [[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], [0, 0, 2], [0, 1, 1], [1, 0, 1], [0, 2, 0], [1, 1, 0], [2, 0, 0]]
     scales = [1, 2, 4]
 
-    print("Creating features for " + filename)
+    print("Creating features: " + filename)
     #NOTE: force big-endian for use at scala end!
     features = np.empty((np.prod(img.shape), len(orders) * len(scales)), dtype=">f")
     i = 0
@@ -25,19 +25,19 @@ def makeFeatures(img, filename):
     #io.savemat(filename + ".mat", {'features':features})
 
 def makeTargets(segTrue, bounds, filename):
-    print("Creating targets for " + filename)
+    print("Creating targets: " + filename)
     min_idx = bounds[:, 0]
-    max_idx = bounds[:, 1]
+    max_idx = bounds[:, 1]-1 # -1 because no affinity on faces
     idxs = get_image_idxs(segTrue, min_idx=min_idx, max_idx=max_idx)
     targets = get_target_affinities(segTrue, idxs).astype(np.int32)
     print("  Saving")
     np.savetxt(filename + ".txt", targets, fmt='%d')
 
 def makeDimensions(im, bounds, filename):
-    print("Creating dimensions for " + filename)
+    print("Creating dimensions: " + filename)
     file = open(filename + ".txt", 'w')
     min_idx = bounds[:, 0]
-    max_idx = bounds[:, 1]
+    max_idx = bounds[:, 1]-1 # -1 because no affinity on faces
     file.write(" ".join([str(i) for i in im.shape]) + "\n")
     file.write(" ".join([str(i) for i in min_idx]) + "\n")
     file.write(" ".join([str(i) for i in max_idx]))
