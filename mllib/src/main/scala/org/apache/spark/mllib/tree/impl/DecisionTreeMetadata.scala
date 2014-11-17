@@ -107,8 +107,29 @@ private[tree] object DecisionTreeMetadata extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
-    val numFeatures = input.take(1)(0).features.size
-    val numExamples = input.count()
+      val numFeatures = input.take(1)(0).features.size
+      val numExamples = input.count()
+      buildMetadata(numFeatures, numExamples, strategy, numTrees, featureSubsetStrategy)
+  }
+
+  def buildMetadataFromFeatures(
+    featuress: RDD[org.apache.spark.mllib.linalg.Vector],
+    strategy: Strategy,
+    numTrees: Int,
+    featureSubsetStrategy: String): DecisionTreeMetadata = {
+
+    val numFeatures = featuress.take(1)(0).size
+    val numExamples = featuress.count()
+    buildMetadata(numFeatures, numExamples, strategy, numTrees, featureSubsetStrategy)
+  }
+
+  def buildMetadata(
+       numFeatures: Int,
+       numExamples: Long,
+       strategy: Strategy,
+       numTrees: Int,
+       featureSubsetStrategy: String): DecisionTreeMetadata = {
+
     val numClasses = strategy.algo match {
       case Classification => strategy.numClassesForClassification
       case Regression => 0

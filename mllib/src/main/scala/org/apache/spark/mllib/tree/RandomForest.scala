@@ -118,6 +118,32 @@ private class RandomForest (
 
 
 
+  def train2(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
+    val timer = new TimeTracker()
+
+    timer.start("total")
+
+    timer.start("init")
+
+    val retaggedInput = input.retag(classOf[LabeledPoint])
+    val metadata =
+      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
+    timer.start("findSplitsBins")
+    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput.map(_.features), metadata)
+    timer.stop("findSplitsBins")
+    logDebug("numBins: feature: number of bins")
+    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
+      s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
+    }.mkString("\n"))
+
+    // Bin feature values (TreePoint representation).
+    // Cache input RDD for speedup during multiple passes.
+    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
+
+    trainFromTreePoints(treeInput, timer, metadata, splits, bins)
+  }
+
+
   def trainFromTreePoints(treeInput: RDD[TreePoint], timer:TimeTracker, metadata:DecisionTreeMetadata,
                           splits:Array[Array[Split]], bins:Array[Array[Bin]]): WeightedEnsembleModel = {
     val (subsample, withReplacement) = {

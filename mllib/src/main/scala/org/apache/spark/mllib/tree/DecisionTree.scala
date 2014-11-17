@@ -952,7 +952,7 @@ object DecisionTree extends Serializable with Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param features RDD of (vector of) featuress
+   * @param featuress RDD of (vector of) featuress
    * @param metadata Learning and dataset metadata
    * @return A tuple of (splits, bins).
    *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
