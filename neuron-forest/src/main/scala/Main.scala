@@ -29,6 +29,7 @@ object Main extends App{
 
   val train = loadData(0.2, fromFront = true)
   println("Training on " + train.count() + " examples")
+  train.take(10).foreach(println)
 
   val categoricalFeaturesInfo = Map[Int, Int]()
   val impurity = "entropy"
@@ -39,7 +40,6 @@ object Main extends App{
   val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, "sqrt", "entropy", 14, 100)
   //val model = RandomForest.trainRegressor(train, Map[Int, Int](), 50, "sqrt", "variance", 14, 100)
   val test = loadData(0.8, fromFront = false)
-//  test.take(50).foreach(println)
 
   val labelsAndPredictions = test.map { point =>
     val prediction = model.predict(point.features)
@@ -52,19 +52,19 @@ object Main extends App{
 
 
 
+  def loadData(p:Double, fromFront:Boolean, numFiles:Int = 1, nFeatures:Int = 30) = {
+    val subvolumes = Seq("000", "001", "010", "011", "100", "101", "110", "111")
 
-
-  def loadData(p:Double, fromFront:Boolean, numFiles:Int = 1, nFeatures:Int = 30) =
-    sc.parallelize(1 to numFiles, numFiles).mapPartitionsWithIndex( (i, _) => {
+    sc.parallelize(1 to subvolumes.size, subvolumes.size).mapPartitionsWithIndex((i, _) => {
       val root = "/home/luke/spark/neuron-forest/data"
 
-      val features_file = root + "/im" + (i+1) + "/features.raw"
+      val features_file = root + "/im1/split_2/" + subvolumes(i) + "/features.raw"
       val features = loadFeatures(features_file, nFeatures)
 
-      val targets_file = root + "/im" + (i+1) + "/targets.txt"
+      val targets_file = root + "/im1/split_2/" + subvolumes(i) + "/targets.txt"
       val n_targets_total = Source.fromFile(targets_file).getLines().size //todo: store this at the top of the file
       val n_targets = (n_targets_total * p).toInt
-      val target_index_offset = if(fromFront) 0 else n_targets_total - n_targets
+      val target_index_offset = if (fromFront) 0 else n_targets_total - n_targets
 
       val allTargets = Source.fromFile(targets_file).getLines().map(_.split(" ").map(_.toDouble))
       val targets = if (fromFront)
@@ -72,7 +72,7 @@ object Main extends App{
       else
         allTargets.drop(target_index_offset)
 
-      val dimensions_file = root + "/im" + (i+1) + "/dimensions.txt"
+      val dimensions_file = root + "/im1/split_2/" + subvolumes(i) + "/dimensions.txt"
       val dimensions = Source.fromFile(dimensions_file).getLines().map(_.split(" ").map(_.toInt)).toArray
 
       val size = dimensions(0)
@@ -80,7 +80,7 @@ object Main extends App{
       val min_idx = (dimensions(1)(0), dimensions(1)(1), dimensions(1)(2))
       val max_idx = (dimensions(2)(0), dimensions(2)(1), dimensions(2)(2))
 
-      println("Targets from " + min_idx + " to " + max_idx )
+      println("Targets from " + min_idx + " to " + max_idx)
 
       val seg_size = (max_idx._1 - min_idx._1 + 1, max_idx._2 - min_idx._2 + 1, max_idx._3 - min_idx._3 + 1)
       val seg_step = (seg_size._2 * seg_size._3, seg_size._3, 1)
@@ -117,19 +117,19 @@ object Main extends App{
           LabeledPoint(targets.next()(0), Vectors.dense(features.slice(j*30, j*30+31).map(_.toDouble)))
         }
       }*/
-      targets.zipWithIndex.map{ case (ts, i) =>
+      targets.zipWithIndex.map { case (ts, i) =>
         val t = i + target_index_offset
         val y = ts(0)
         val example_idx =
           step._1 * (min_idx._1 + t / seg_step._1) +
-          step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2) +
-                    (min_idx._3 + t % seg_step._2)
-//        if(t < 129) {
-//          println(t + " => " + example_idx)
-//          println(step._1 * (min_idx._1 + t / seg_step._1))
-//          println(step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2))
-//          println((min_idx._3 + t % seg_step._2))
-//        }
+            step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2) +
+            (min_idx._3 + t % seg_step._2)
+        //        if(t < 129) {
+        //          println(t + " => " + example_idx)
+        //          println(step._1 * (min_idx._1 + t / seg_step._1))
+        //          println(step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2))
+        //          println((min_idx._3 + t % seg_step._2))
+        //        }
         /*if(22 <= i && i <= 25) {
           println("i = " + i)
           println("t = " + t)
@@ -142,10 +142,10 @@ object Main extends App{
           println((min_idx._3 + t % seg_step._2))
           println(" ")
         }*/
-        LabeledPoint(y, Vectors.dense(features.slice(example_idx*nFeatures, (example_idx+1)*nFeatures).map(_.toDouble)))
+        LabeledPoint(y, Vectors.dense(features.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
       }
     }).cache()
-
+  }
 
   def loadFeatures(path:String, n_features:Int):Array[Float] = {
     val file = new RandomAccessFile(path, "r")

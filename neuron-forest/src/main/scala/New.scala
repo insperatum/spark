@@ -24,6 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import org.apache.spark.mllib.linalg.Vector
 
+import com.esotericsoftware.kryo.Kryo
+import org.apache.spark.serializer.KryoRegistrator
+
 object New extends App{
   val data_root = "/home/luke/spark/neuron-forest/data"
   val featureSubsetStrategy = "sqrt"
@@ -38,6 +41,8 @@ object New extends App{
   val conf = new SparkConf()
     .setAppName("Hello")
     .setMaster("local")
+  conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+  conf.set("spark.kryo.registrator", "MyRegistrator")
   val sc = new SparkContext(conf)
 
 
@@ -79,9 +84,11 @@ object New extends App{
 
 
 
-  def loadTrainingData(p:Double, fromFront:Boolean, numFiles:Int = 1) = {
-    val rawFeaturesData = sc.parallelize(1 to numFiles, numFiles).mapPartitionsWithIndex((i, _) => {
-      val features_file = data_root + "/im" + (i + 1) + "/features.raw"
+  def loadTrainingData(p:Double, fromFront:Boolean, numFiles:Int = 1) = { //todo: use numFiles
+    val subvolumes = Seq("000")//, "001", "010", "011", "100", "101", "110", "111")
+
+    val rawFeaturesData = sc.parallelize(1 to subvolumes.size, subvolumes.size).mapPartitionsWithIndex((i, _) => {
+      val features_file = data_root + "/im1/split_2/" + subvolumes(i) + "/features.raw"
       Seq(new RawFeatureData(features_file, nFeatures)).toIterator
     })
     rawFeaturesData.cache()
@@ -96,8 +103,8 @@ object New extends App{
     val trainingData = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
       val binnedFeatureData = new BinnedFeatureData(s.next(), bins)
 
-      val targets_file = data_root + "/im" + (i + 1) + "/targets.txt"
-      val n_targets_total = Source.fromFile(targets_file).getLines().size //todo: store this at the top of the file
+      val targets_file = data_root + "/im1/split_2/" + subvolumes(i) + "/targets.txt"
+      val n_targets_total = Source.fromFile(targets_file).getLines().size //todo: store this at the top of the file (OR GET FROM DIMENSIONS!)
       val n_targets = (n_targets_total * p).toInt
       val target_index_offset = if (fromFront) 0 else n_targets_total - n_targets
 
@@ -107,7 +114,7 @@ object New extends App{
       else
         allTargets.drop(target_index_offset)
 
-      val dimensions_file = data_root + "/im" + (i + 1) + "/dimensions.txt"
+      val dimensions_file = data_root + "/im1/split_2/" + subvolumes(i) + "/dimensions.txt"
       val dimensions = Source.fromFile(dimensions_file).getLines().map(_.split(" ").map(_.toInt)).toArray
 
       val size = dimensions(0)
@@ -131,8 +138,16 @@ object New extends App{
       }
     })
     rawFeaturesData.unpersist()
-    trainingData.cache()
+    //trainingData.cache()
     (trainingData, splits, bins)
   }
 
+}
+
+
+
+class MyRegistrator extends KryoRegistrator {
+  override def registerClasses(kryo: Kryo) {
+    kryo.register(classOf[BinnedFeatureData])
+  }
 }
