@@ -88,7 +88,12 @@ class WeightedEnsembleModel(
           val prediction = learner.predict(features).toInt
           predictionToCount(prediction) = predictionToCount.getOrElse(prediction, 0) + 1
         }
-        predictionToCount.maxBy(_._2)._1
+        //todo: MAKE A FLAG FOR THIS
+        predictionToCount.map { case (pred, count) =>
+            pred.toDouble * count / weakHypotheses.length
+        }.reduce(_+_)
+
+        //predictionToCount.maxBy(_._2)._1
       case Regression =>
         weakHypotheses.map(_.predict(features)).sum / weakHypotheses.size
     }
