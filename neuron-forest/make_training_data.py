@@ -73,6 +73,7 @@ def makeData(numSplit=1, margin=10, numImages=1):
     Helmstaedter2013 = io.loadmat("/home/luke/data/Helmstaedter_etal_Nature_2013_e2006_TrainingData_all.mat")
     if not os.path.exists("data"): os.mkdir("data")
     for i in range(0, numImages):
+        print("Splitting im" + str(i)+ " into " + str(numSplit) + "^3 different subvolumes".format())
         bounds = Helmstaedter2013["boundingBox"][0, i]
         outer_min_idx = bounds[:, 0]
         outer_max_idx = bounds[:, 1]-1 # -1 because no affinity on faces
@@ -94,12 +95,12 @@ def makeData(numSplit=1, margin=10, numImages=1):
                     box_min_margin = box_min - margin
                     box_max_margin = box_max + margin
                     box_min_relative = [margin, margin, margin]
-                    box_max_relative = margin + box_size
+                    box_max_relative = margin + box_size-1
                     shape = box_max_margin - box_min_margin + 1
 
                     if not os.path.exists(folder): os.mkdir(folder)
-                    makeFeatures(Helmstaedter2013["im"][0, i], folder + "/features", box_min_margin, box_max_margin)
                     makeTargets(Helmstaedter2013["segTrue"][0, i], folder + "/targets", box_min, box_max)
+                    makeFeatures(Helmstaedter2013["im"][0, i], folder + "/features", box_min_margin, box_max_margin)
                     makeDimensions(shape, folder + "/dimensions",  box_min_relative, box_max_relative)
 
 makeData(2)
