@@ -46,7 +46,6 @@ object New extends App{
   // -------------------  Train  --------------------------------
 
   val train = loadTrainingData(0.2, fromFront = true)
-  println("Training on " + train.count() + " examples")
   val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, impurity, maxDepth, maxBins)
   //val model = RandomForest.trainRegressor(train, Map[Int, Int](), 50, "sqrt", "variance", 14, 100)
 
@@ -119,6 +118,7 @@ object New extends App{
       }
     }).cache()
 
+    rawFeaturesData.unpersist()
     trainingData
   }
 
