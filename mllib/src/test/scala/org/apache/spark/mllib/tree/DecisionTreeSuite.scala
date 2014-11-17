@@ -41,7 +41,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val strategy = new Strategy(Classification, Gini, 3, 2, 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 99)
@@ -62,7 +62,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
     assert(splits.length === 2)
@@ -88,7 +88,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
     // no bins or splits pre-computed for ordered categorical features
@@ -184,7 +184,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(metadata.isUnordered(featureIndex = 0))
     assert(metadata.isUnordered(featureIndex = 1))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 3)
@@ -279,7 +279,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
     // no bins or splits pre-computed for ordered categorical features
@@ -303,7 +303,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
     // no bins or splits pre-computed for ordered categorical features
@@ -382,7 +382,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
 
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -406,7 +406,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
 
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -431,7 +431,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
 
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -456,7 +456,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
 
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -477,7 +477,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd.map(_.features), metadata)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -783,7 +783,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
       numClassesForClassification = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(input.map(_.features), metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
@@ -826,7 +826,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
       numClassesForClassification = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(input.map(_.features), metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)

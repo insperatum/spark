@@ -76,13 +76,13 @@ private class RandomForest (
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
     s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}.")
 
+
   /**
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return WeightedEnsembleModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
-
     val timer = new TimeTracker()
 
     timer.start("total")
@@ -102,17 +102,24 @@ private class RandomForest (
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
     timer.start("findSplitsBins")
-    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput.map(_.features), metadata)
     timer.stop("findSplitsBins")
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
-        s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
-      }.mkString("\n"))
+      s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
+    }.mkString("\n"))
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
 
+    trainFromTreePoints(treeInput, timer, metadata, splits, bins)
+  }
+
+
+
+  def trainFromTreePoints(treeInput: RDD[TreePoint], timer:TimeTracker, metadata:DecisionTreeMetadata,
+                          splits:Array[Array[Split]], bins:Array[Array[Bin]]): WeightedEnsembleModel = {
     val (subsample, withReplacement) = {
       // TODO: Have a stricter check for RF in the strategy
       val isRandomForest = numTrees > 1

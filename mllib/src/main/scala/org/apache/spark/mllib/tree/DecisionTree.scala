@@ -38,7 +38,7 @@ import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.SparkContext._
-
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * :: Experimental ::
@@ -952,7 +952,7 @@ object DecisionTree extends Serializable with Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param features RDD of (vector of) featuress
    * @param metadata Learning and dataset metadata
    * @return A tuple of (splits, bins).
    *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
@@ -961,7 +961,7 @@ object DecisionTree extends Serializable with Logging {
    *          of size (numFeatures, numBins).
    */
   protected[tree] def findSplitsBins(
-      input: RDD[LabeledPoint],
+      featuress: RDD[Vector],
       metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
@@ -970,7 +970,7 @@ object DecisionTree extends Serializable with Logging {
 
     // Sample the input only if there are continuous features.
     val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous)
-    val sampledInput = if (hasContinuousFeatures) {
+    val sampledFeaturess = if (hasContinuousFeatures) {
       // Calculate the number of samples for approximate quantile calculation.
       val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
       val fraction = if (requiredSamples < metadata.numExamples) {
@@ -979,9 +979,9 @@ object DecisionTree extends Serializable with Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
+      featuress.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
     } else {
-      new Array[LabeledPoint](0)
+      new Array[Vector](0)
     }
 
     metadata.quantileStrategy match {
@@ -994,7 +994,7 @@ object DecisionTree extends Serializable with Logging {
         var featureIndex = 0
         while (featureIndex < numFeatures) {
           if (metadata.isContinuous(featureIndex)) {
-            val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
+            val featureSamples = sampledFeaturess.map(f => f(featureIndex))
             val featureSplits = findSplitsForContinuousFeature(featureSamples,
               metadata, featureIndex)
 
