@@ -10,24 +10,24 @@ import org.apache.spark.SparkConf
 import org.apache.spark.mllib.linalg.Vectors
 
 import org.apache.spark.ml
-import org.apache.spark.mllib.tree.model.Split
+import org.apache.spark.mllib.tree.model.{Bin, Split}
 import org.apache.spark.mllib.tree.{LukeUtil, RandomForest}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.{BinnedFeatureData, RawFeatureData, DecisionTreeMetadata}
-import org.apache.spark.mllib.tree.impurity.Gini
+import org.apache.spark.mllib.tree.impl._
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini}
+import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.tree.model.Bin
 
 object New extends App{
   val data_root = "/home/luke/spark/neuron-forest/data"
   val featureSubsetStrategy = "sqrt"
-  val impurity = "entropy"
+  val impurity = Entropy
   val maxDepth = 4
   val maxBins = 100
   val nFeatures = 30
@@ -38,15 +38,25 @@ object New extends App{
   val conf = new SparkConf()
     .setAppName("Hello")
     .setMaster("local")
-    .set("spark.executor.memory", "4g")
   val sc = new SparkContext(conf)
 
 
 
   // -------------------  Train  --------------------------------
 
-  val train = loadTrainingData(0.2, fromFront = true)
-  val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, impurity, maxDepth, maxBins)
+  val (train, splits, bins) = loadTrainingData(0.2, fromFront = true)
+  val strategy = new Strategy(Classification, impurity, maxDepth, 2, maxBins, Sort, Map[Int, Int]())
+  val model = RandomForest.trainClassifierFromTreePoints(
+    train,
+    strategy,
+    nTrees,
+    nFeatures,
+    400000, // <------------------ TODO: NOT THIS <-------------------
+    featureSubsetStrategy: String,
+    1,
+    splits,
+    bins)
+  //val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, impurity, maxDepth, maxBins)
   //val model = RandomForest.trainRegressor(train, Map[Int, Int](), 50, "sqrt", "variance", 14, 100)
 
   println("trained.")
@@ -73,13 +83,15 @@ object New extends App{
     val rawFeaturesData = sc.parallelize(1 to numFiles, numFiles).mapPartitionsWithIndex((i, _) => {
       val features_file = data_root + "/im" + (i + 1) + "/features.raw"
       Seq(new RawFeatureData(features_file, nFeatures)).toIterator
-    }).cache()
-    val featsRDD = rawFeaturesData.mapPartitions(_.next().toVectors).cache()
-    println("getting splits and bins!")
+    })
+    rawFeaturesData.cache()
+
+    val featsRDD = rawFeaturesData.mapPartitions(_.next().toVectors)
+    featsRDD.cache()
+    println("getting splits and bins")
     val (splits, bins) = LukeUtil.getSplitsAndBins(featsRDD, maxBins)
     featsRDD.unpersist()
-    println("done!")
-    bins.head.foreach(println)
+    println(" found bins!")
 
     val trainingData = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
       val binnedFeatureData = new BinnedFeatureData(s.next(), bins)
@@ -114,12 +126,13 @@ object New extends App{
           step._1 * (min_idx._1 + t / seg_step._1) +
             step._2 * (min_idx._2 + (t % seg_step._1) / seg_step._2) +
             (min_idx._3 + t % seg_step._2)
-        LabeledPoint(y, Vectors.dense(binnedFeatureData.arr.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
+        //LabeledPoint(y, Vectors.dense(binnedFeatureData.arr.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
+        new TreePoint(y, null, binnedFeatureData, example_idx)
       }
-    }).cache()
-
+    })
     rawFeaturesData.unpersist()
-    trainingData
+    trainingData.cache()
+    (trainingData, splits, bins)
   }
 
 }

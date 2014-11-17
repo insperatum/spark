@@ -65,4 +65,5 @@ class BinnedFeatureData(featureData:RawFeatureData, bins:Array[Array[Bin]]) {
   }
 
   def getValue(i:Int, f:Int) = featureData.getValue(i, f)
+  def getBin(i:Int, f:Int) = binnedFeatures(i * nFeatures + f)
 }

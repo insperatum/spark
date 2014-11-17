@@ -117,33 +117,6 @@ private class RandomForest (
   }
 
 
-
-  def train2(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
-    val timer = new TimeTracker()
-
-    timer.start("total")
-
-    timer.start("init")
-
-    val retaggedInput = input.retag(classOf[LabeledPoint])
-    val metadata =
-      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-    timer.start("findSplitsBins")
-    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput.map(_.features), metadata)
-    timer.stop("findSplitsBins")
-    logDebug("numBins: feature: number of bins")
-    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
-      s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
-    }.mkString("\n"))
-
-    // Bin feature values (TreePoint representation).
-    // Cache input RDD for speedup during multiple passes.
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-
-    trainFromTreePoints(treeInput, timer, metadata, splits, bins)
-  }
-
-
   def trainFromTreePoints(treeInput: RDD[TreePoint], timer:TimeTracker, metadata:DecisionTreeMetadata,
                           splits:Array[Array[Split]], bins:Array[Array[Bin]]): WeightedEnsembleModel = {
     val (subsample, withReplacement) = {
@@ -279,6 +252,28 @@ object RandomForest extends Serializable with Logging {
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
     rf.train(input)
+  }
+
+
+  def trainClassifierFromTreePoints(
+       treePoints: RDD[TreePoint],
+       strategy: Strategy,
+       numTrees: Int,
+       numFeatures: Int,
+       numExamples: Int,
+       featureSubsetStrategy: String,
+       seed: Int,
+       splits:Array[Array[Split]],
+       bins:Array[Array[Bin]]): WeightedEnsembleModel = {
+    require(strategy.algo == Classification,
+      s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
+    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
+    val timer = new TimeTracker()
+    timer.start("total")
+    timer.start("init")
+    val metadata = DecisionTreeMetadata.buildMetadata(numFeatures, numExamples, strategy, numTrees, featureSubsetStrategy)
+
+    rf.trainFromTreePoints(treePoints, timer, metadata, splits, bins)
   }
 
   /**
