@@ -42,6 +42,7 @@ class TreePoint(val label: Double, val arr:Array[Int], val data:BinnedFeatureDat
   def binnedFeatures(f:Int) = {
     if(arr == null) data.getBin(idx, f) else arr(f)
   }
+  def features(f:Int) = data.getValue(idx, f)
 }
 
 

@@ -31,10 +31,10 @@ object New extends App{
   val data_root = "/home/luke/spark/neuron-forest/data"
   val featureSubsetStrategy = "sqrt"
   val impurity = Entropy
-  val maxDepth = 4
+  val maxDepth = 14
   val maxBins = 100
   val nFeatures = 30
-  val nTrees = 5
+  val nTrees = 50
 
 
   println("Starting Spark!")
@@ -49,7 +49,7 @@ object New extends App{
 
   // -------------------  Train  --------------------------------
 
-  val (train, splits, bins) = loadTrainingData(0.2, fromFront = true)
+  val (train, splits, bins) = loadData(0.2, fromFront = true)
   val strategy = new Strategy(Classification, impurity, maxDepth, 2, maxBins, Sort, Map[Int, Int]())
   val model = RandomForest.trainClassifierFromTreePoints(
     train,
@@ -61,31 +61,32 @@ object New extends App{
     1,
     splits,
     bins)
-  //val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, impurity, maxDepth, maxBins)
+
+//  val model = RandomForest.trainClassifier(train, 2, Map[Int, Int](), 50, featureSubsetStrategy, "entropy", maxDepth, maxBins)
   //val model = RandomForest.trainRegressor(train, Map[Int, Int](), 50, "sqrt", "variance", 14, 100)
 
   println("trained.")
 
   // --------------------  Test  --------------------------------
-//  val
-//  val test = loadTrainingData(0.8, fromFront = false)
-////  test.take(50).foreach(println)
-//
-//  val labelsAndPredictions = test.map { point =>
-//    val prediction = model.predict(point.features)
-//    (point.label, prediction)
-//  }
-//  val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow(v - p, 2)}.mean()
-//  println("Test Mean Squared Error = " + testMSE)
-//  println("Learned regression tree model:\n" + model)
+  val (test, _, _) = loadData(0.8, fromFront = false)
+  //val test = train
+
+  val labelsAndPredictions = test.map { point =>
+    val features = Array.tabulate[Double](30)(f => point.features(f))
+    val prediction = model.predict(Vectors.dense(features))
+    (point.label, prediction)
+  }
+  val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow(v - p, 2)}.mean()
+  println("Test Mean Squared Error = " + testMSE)
+  println("Learned regression tree model:\n" + model)
 
   
 
 
 
 
-  def loadTrainingData(p:Double, fromFront:Boolean, numFiles:Int = 1) = { //todo: use numFiles
-    val subvolumes = Seq("000")//, "001", "010", "011", "100", "101", "110", "111")
+  def loadData(p:Double, fromFront:Boolean, numFiles:Int = 1) = { //todo: use numFiles
+    val subvolumes = Seq("000", "001", "010", "011", "100", "101", "110", "111")
 
     val rawFeaturesData = sc.parallelize(1 to subvolumes.size, subvolumes.size).mapPartitionsWithIndex((i, _) => {
       val features_file = data_root + "/im1/split_2/" + subvolumes(i) + "/features.raw"
@@ -94,13 +95,11 @@ object New extends App{
     rawFeaturesData.cache()
 
     val featsRDD = rawFeaturesData.mapPartitions(_.next().toVectors)
-    featsRDD.cache()
     println("getting splits and bins")
     val (splits, bins) = LukeUtil.getSplitsAndBins(featsRDD, maxBins)
-    featsRDD.unpersist()
     println(" found bins!")
 
-    val trainingData = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
+    val data = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
       val binnedFeatureData = new BinnedFeatureData(s.next(), bins)
 
       val targets_file = data_root + "/im1/split_2/" + subvolumes(i) + "/targets.txt"
@@ -138,8 +137,8 @@ object New extends App{
       }
     })
     rawFeaturesData.unpersist()
-    //trainingData.cache()
-    (trainingData, splits, bins)
+    data.cache()
+    (data, splits, bins)
   }
 
 }

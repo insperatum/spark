@@ -131,7 +131,7 @@ private class RandomForest (
 
     val baggedInput
       = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
-        .persist(StorageLevel.MEMORY_AND_DISK)
+        //.persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -205,7 +205,7 @@ private class RandomForest (
       timer.stop("findBestSplits")
     }
 
-    baggedInput.unpersist()
+    //baggedInput.unpersist()
 
     timer.stop("total")
 
@@ -272,7 +272,7 @@ object RandomForest extends Serializable with Logging {
     timer.start("total")
     timer.start("init")
     val metadata = DecisionTreeMetadata.buildMetadata(numFeatures, numExamples, strategy, numTrees, featureSubsetStrategy)
-
+    println("HERE WE GO!")
     rf.trainFromTreePoints(treePoints, timer, metadata, splits, bins)
   }
 
