@@ -832,7 +832,12 @@ object DecisionTree extends Serializable with Logging {
               rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
-        (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        val a = try {
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        } catch {
+          case _ => null
+        }
+        a
       } else if (binAggregates.metadata.isUnordered(featureIndex)) {
         // Unordered categorical feature
         val (leftChildOffset, rightChildOffset) =

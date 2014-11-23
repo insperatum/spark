@@ -272,7 +272,7 @@ object RandomForest extends Serializable with Logging {
     timer.start("total")
     timer.start("init")
     val metadata = DecisionTreeMetadata.buildMetadata(numFeatures, numExamples, strategy, numTrees, featureSubsetStrategy)
-    println("HERE WE GO!")
+    println("HERE WE GO! Training a model with " + numExamples + " examples and " + numFeatures + " features.")
     rf.trainFromTreePoints(treePoints, timer, metadata, splits, bins)
   }
 

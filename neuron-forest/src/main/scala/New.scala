@@ -17,8 +17,9 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl._
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini}
+import org.apache.spark.mllib.tree.impurity.{Impurity, Entropy, Gini}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -28,19 +29,16 @@ import com.esotericsoftware.kryo.Kryo
 import org.apache.spark.serializer.KryoRegistrator
 
 object New extends App{
-  val data_root = "/home/luke/spark/neuron-forest/data"
-  val featureSubsetStrategy = "sqrt"
-  val impurity = Entropy
-  val maxDepth = 14
-  val maxBins = 100
-  val nFeatures = 30
-  val nTrees = 50
+  val s = getSettingsFromArgs(args)
+  println("Settings:\n" + s)
 
+  val offsets = for(x <- s.dimOffsets; y <- s.dimOffsets; z <- s.dimOffsets) yield (x, y, z)
+  val nFeatures = s.nBaseFeatures * offsets.length
 
   println("Starting Spark!")
   val conf = new SparkConf()
     .setAppName("Hello")
-    .setMaster("local")
+  if(! s.master.isEmpty) conf.setMaster(s.master)
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", "MyRegistrator")
   val sc = new SparkContext(conf)
@@ -50,14 +48,15 @@ object New extends App{
   // -------------------  Train  --------------------------------
 
   val (train, splits, bins) = loadData(0.2, fromFront = true)
-  val strategy = new Strategy(Classification, impurity, maxDepth, 2, maxBins, Sort, Map[Int, Int]())
+  //train.persist(StorageLevel.MEMORY_ONLY_SER)
+  val strategy = new Strategy(Classification, s.impurity, s.maxDepth, 2, s.maxBins, Sort, Map[Int, Int](), maxMemoryInMB = s.maxMemoryInMB)
   val model = RandomForest.trainClassifierFromTreePoints(
     train,
     strategy,
-    nTrees,
+    s.nTrees,
     nFeatures,
     400000, // <------------------ TODO: NOT THIS <-------------------
-    featureSubsetStrategy: String,
+    s.featureSubsetStrategy: String,
     1,
     splits,
     bins)
@@ -72,7 +71,7 @@ object New extends App{
   //val test = train
 
   val labelsAndPredictions = test.map { point =>
-    val features = Array.tabulate[Double](30)(f => point.features(f))
+    val features = Array.tabulate[Double](nFeatures)(f => point.features(f))
     val prediction = model.predict(Vectors.dense(features))
     (point.label, prediction)
   }
@@ -85,24 +84,22 @@ object New extends App{
 
 
 
-  def loadData(p:Double, fromFront:Boolean, numFiles:Int = 1) = { //todo: use numFiles
-    val subvolumes = Seq("000", "001", "010", "011", "100", "101", "110", "111")
-
-    val rawFeaturesData = sc.parallelize(1 to subvolumes.size, subvolumes.size).mapPartitionsWithIndex((i, _) => {
-      val features_file = data_root + "/im1/split_2/" + subvolumes(i) + "/features.raw"
-      Seq(new RawFeatureData(features_file, nFeatures)).toIterator
+  def loadData(p:Double, fromFront:Boolean) = { //todo: use numFiles
+    val rawFeaturesData = sc.parallelize(1 to s.subvolumes.size, s.subvolumes.size).mapPartitionsWithIndex((i, _) => {
+      val features_file = s.data_root + "/" + s.subvolumes(i) + "/features.raw"
+      Seq(new RawFeatureData(features_file, s.nBaseFeatures)).toIterator
     })
     rawFeaturesData.cache()
 
-    val featsRDD = rawFeaturesData.mapPartitions(_.next().toVectors)
+    val baseFeaturesRDD = rawFeaturesData.mapPartitions(_.next().toVectors)
     println("getting splits and bins")
-    val (splits, bins) = LukeUtil.getSplitsAndBins(featsRDD, maxBins)
+    val (splits, bins) = LukeUtil.getSplitsAndBins(baseFeaturesRDD, s.maxBins, s.nBaseFeatures, offsets.length)
     println(" found bins!")
 
-    val data = rawFeaturesData.mapPartitionsWithIndex((i, s) => {
-      val binnedFeatureData = new BinnedFeatureData(s.next(), bins)
+    val data = rawFeaturesData.mapPartitionsWithIndex((i, f) => {
+      val startTime = System.currentTimeMillis()
 
-      val targets_file = data_root + "/im1/split_2/" + subvolumes(i) + "/targets.txt"
+      val targets_file = s.data_root + "/" + s.subvolumes(i) + "/targets.txt"
       val n_targets_total = Source.fromFile(targets_file).getLines().size //todo: store this at the top of the file (OR GET FROM DIMENSIONS!)
       val n_targets = (n_targets_total * p).toInt
       val target_index_offset = if (fromFront) 0 else n_targets_total - n_targets
@@ -113,7 +110,7 @@ object New extends App{
       else
         allTargets.drop(target_index_offset)
 
-      val dimensions_file = data_root + "/im1/split_2/" + subvolumes(i) + "/dimensions.txt"
+      val dimensions_file = s.data_root + "/" + s.subvolumes(i) + "/dimensions.txt"
       val dimensions = Source.fromFile(dimensions_file).getLines().map(_.split(" ").map(_.toInt)).toArray
 
       val size = dimensions(0)
@@ -123,9 +120,12 @@ object New extends App{
 
       println("Targets from " + min_idx + " to " + max_idx)
 
+
       val seg_size = (max_idx._1 - min_idx._1 + 1, max_idx._2 - min_idx._2 + 1, max_idx._3 - min_idx._3 + 1)
       val seg_step = (seg_size._2 * seg_size._3, seg_size._3, 1)
-      targets.zipWithIndex.map { case (ts, i) =>
+
+      val binnedFeatureData = new BinnedFeatureData(f.next(), bins, seg_step, offsets)
+      val d = targets.zipWithIndex.map { case (ts, i) =>
         val t = i + target_index_offset
         val y = ts(0)
         val example_idx =
@@ -135,12 +135,35 @@ object New extends App{
         //LabeledPoint(y, Vectors.dense(binnedFeatureData.arr.slice(example_idx * nFeatures, (example_idx + 1) * nFeatures).map(_.toDouble)))
         new TreePoint(y, null, binnedFeatureData, example_idx)
       }
+
+      println("creating partition data took " + (System.currentTimeMillis() - startTime) + " ms")
+      d
     })
     rawFeaturesData.unpersist()
-    data.cache()
     (data, splits, bins)
   }
 
+  case class RunSettings(maxMemoryInMB:Int, data_root:String, subvolumes:Array[String], featureSubsetStrategy:String,
+                         impurity:Impurity, maxDepth:Int, maxBins:Int, nBaseFeatures:Int, nTrees:Int,
+                         dimOffsets:Array[Int], master:String)
+
+  def getSettingsFromArgs(args:Array[String]):RunSettings = {
+    val m = args.map(_.split("=")).map(arr => arr(0) -> arr(1)).toMap
+    val impurityMap = Seq("entropy" -> Entropy, "gini" -> Gini).toMap
+    RunSettings(
+      maxMemoryInMB = m.getOrElse("maxMemoryInMB", "1000").toInt,
+      data_root     = m.getOrElse("data_root",     "/home/luke/spark/neuron-forest/data/im1/split_2"),
+      subvolumes    = m.getOrElse("subvolumes",    "000,001,010,011,100,101,110,111").split(",").toArray,
+      featureSubsetStrategy = m.getOrElse("featureSubsetStrategy", "sqrt"),
+      impurity      = impurityMap(m.getOrElse("impurity", "entropy")),
+      maxDepth      = m.getOrElse("maxDepth",      "14").toInt,
+      maxBins       = m.getOrElse("maxBins",       "100").toInt,
+      nBaseFeatures = m.getOrElse("nBaseFeatures", "30").toInt,
+      nTrees        = m.getOrElse("nTrees",        "50").toInt,
+      dimOffsets    = m.getOrElse("dimOffsets",    "0").split(",").map(_.toInt).toArray,
+      master        = m.getOrElse("master",        "local") // use empty string to not setdata_
+    )
+  }
 }
 
 

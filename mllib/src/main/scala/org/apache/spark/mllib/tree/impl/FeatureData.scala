@@ -47,23 +47,31 @@ class RawFeatureData(file:String, val nFeatures:Int) extends FeatureData with Se
   }
 }
 
-class BinnedFeatureData(featureData:RawFeatureData, bins:Array[Array[Bin]]) extends Serializable {
+class BinnedFeatureData(featureData:RawFeatureData,
+                        bins:Array[Array[Bin]],
+                        step:(Int, Int, Int),
+                        offsets:Seq[(Int, Int, Int)]) {
   val arr = featureData.arr
-  val binnedFeatures = Array.ofDim[Int](arr.length)
-  def nFeatures = featureData.nFeatures
-  def nExamples = featureData.nExamples
+  val binnedBaseFeatures = Array.ofDim[Int](arr.length)
+  val nBaseFeatures = featureData.nFeatures
+  val nFeatures = nBaseFeatures * offsets.length
+  val nExamples = featureData.nExamples
+  val featureOffsets = offsets.flatMap(o => {
+    val idxOffset = o._1 * step._1 + o._2 * step._2 + o._3 * step._3
+    Array.fill(nBaseFeatures){idxOffset}
+  })
 
   var i = 0
   while(i < nExamples) {
     var f = 0
-    while(f < nFeatures) {
-      val idx = i * nFeatures + f
-      binnedFeatures(idx) = TreePoint.findBin(arr(idx), 0, false, bins(f))
+    while(f < nBaseFeatures) {
+      val idx = i * nBaseFeatures + f
+      binnedBaseFeatures(idx) = TreePoint.findBin(arr(idx), 0, false, bins(f))
       f += 1
     }
     i += 1
   }
 
-  def getValue(i:Int, f:Int) = featureData.getValue(i, f)
-  def getBin(i:Int, f:Int) = binnedFeatures(i * nFeatures + f)
+  def getValue(i:Int, f:Int) = featureData.getValue(i + featureOffsets(f), f % nBaseFeatures)
+  def getBin(i:Int, f:Int) = binnedBaseFeatures((i + featureOffsets(f)) * nBaseFeatures + (f % nBaseFeatures))
 }
